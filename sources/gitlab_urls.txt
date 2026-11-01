@@ -1,0 +1,7 @@
+# Your sample GitLab links - one per line. Lines starting with # are ignored.
+# These reports are always included in the collection (they bypass the quality tiers and the caps),
+# and they are the reports used to check that extraction and cleaning look right.
+#
+# Format:  https://gitlab.com/gitlab-org/gitlab/-/issues/<number>
+# Then run:  .\hrag.bat gitlab fetch
+

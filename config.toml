@@ -1,0 +1,147 @@
+# hackerone-rag configuration.  NO SECRETS HERE - keys are read from environment variables, then the
+# local .env file (copy .env.example to .env), then the OS credential store (python -m hrag keys set <NAME>).
+# Lines marked UNVERIFIED were not checked against the provider's docs.
+
+[paths]
+db        = "data/hrag.db"
+cache_dir = "data/cache"
+eval_dir  = "eval"
+
+[defaults]               # which profile each command uses unless you pass a flag
+chunk_set = "c400"
+embedding = "openrouter_3_large"
+answer    = "claude_sonnet"
+judge     = "openai_judge"     # use a DIFFERENT company from `answer` (self-preference bias)
+rerank    = "voyage_rerank"
+enrich    = "openrouter_enrich"   # writes the "When to try this" text (one OPENROUTER_API_KEY covers embeddings + this)
+
+[collect]                # the NEW pipeline: HackerOne API + GitLab copies -> clean -> flag -> select
+n_reports            = 100          # how many reports to keep (80-100 recommended)
+min_body_chars       = 400          # after cleaning; shorter = rejected as trivial
+sparse_chars         = 600          # shorter than this = kept but flagged "sparse"
+per_program          = 3            # at most this many reports from one HackerOne program
+per_weakness         = 8            # at most this many with the same weakness / CWE
+max_gitlab           = 30           # cap on GitLab top-up reports (they are all one program); your pinned links are exempt
+near_duplicate_jaccard = 0.80
+gitlab_urls_file     = "sources/gitlab_urls.txt"   # your six sample links, one per line - always included
+gitlab_project       = "gitlab-org/gitlab"
+
+[ingest]                 # LEGACY: only for `ingest-dataset` (the old Hugging Face dataset path)
+n_reports            = 100
+seed                 = 42
+min_body_chars       = 400          # skip near-empty reports
+allowed_substates    = ["resolved"]
+near_duplicate_jaccard = 0.80       # word 5-gram overlap above this = near duplicate
+dataset_base_url     = "https://huggingface.co/datasets/Hacker0x01/hackerone_disclosed_reports/resolve/main/data/"
+dataset_files        = ["train-00000-of-00001.parquet", "validation-00000-of-00001.parquet", "test-00000-of-00001.parquet"]
+
+[retrieval]
+mode                  = "hybrid"    # vector (semantic) | bm25 (keyword) | hybrid (both, merged by rank)
+top_k                 = 5
+candidates            = 30          # how many each leg / the reranker looks at
+rrf_k                 = 60          # Cormack et al. SIGIR 2009 default
+max_chunks_per_report = 2
+dedupe_cosine         = 0.95        # drop a result this similar to a better one (0 = off)
+rerank                = false
+
+# ---- chunk sets: name -> sizes (tokens are ESTIMATED as characters / 3.6) ----
+[chunk_sets.c256]
+max_tokens = 256
+overlap_tokens = 40
+min_tokens = 40
+[chunk_sets.c400]
+max_tokens = 400
+overlap_tokens = 50
+min_tokens = 40
+[chunk_sets.c600]
+max_tokens = 600
+overlap_tokens = 60
+min_tokens = 40
+[chunk_sets.whole]       # never splits a report: one chunk per report
+max_tokens = 100000
+overlap_tokens = 0
+min_tokens = 0
+
+# ---- embedding profiles (benchmark them with `embed --embed <name>`) ----
+[embeddings.openrouter_3_large]     # DEFAULT: OpenAI's text-embedding-3-large through OpenRouter, one OPENROUTER_API_KEY for everything
+provider = "openai_compat"
+base_url = "https://openrouter.ai/api/v1"
+model = "openai/text-embedding-3-large"
+api_key_name = "OPENROUTER_API_KEY"
+dimensions = 3072                   # UNVERIFIED against OpenRouter: if it rejects the `dimensions` parameter set this to 0
+                                    # (the model's default is already 3072 and the stored dimension is still recorded)
+
+[embeddings.openai_large]
+provider = "openai"
+model = "text-embedding-3-large"
+api_key_name = "OPENAI_API_KEY"
+dimensions = 0                      # 0 = model default (3072)
+
+[embeddings.openai_small]           # cheap control
+provider = "openai"
+model = "text-embedding-3-small"
+api_key_name = "OPENAI_API_KEY"
+dimensions = 0
+
+[embeddings.voyage_4]
+provider = "voyage"                 # sends input_type=query|document, output_dimension
+model = "voyage-4"
+api_key_name = "VOYAGE_API_KEY"
+dimensions = 1024                   # allowed: 256, 512, 1024, 2048
+
+[embeddings.qwen3_openrouter]       # same route Bhedan's Smriti uses (its comments confirm dimensions=1024 works)
+provider = "openai_compat"
+base_url = "https://openrouter.ai/api/v1"
+model = "qwen/qwen3-embedding-8b"
+api_key_name = "OPENROUTER_API_KEY"
+dimensions = 1024
+query_prefix = "Instruct: Given a security question, retrieve passages from HackerOne vulnerability reports that answer it\nQuery:"
+doc_prefix = ""
+
+[embeddings.qwen3_deepinfra]        # UNVERIFIED base_url - confirm in DeepInfra docs before use
+provider = "openai_compat"
+base_url = "https://api.deepinfra.com/v1/openai"
+model = "Qwen/Qwen3-Embedding-8B"
+api_key_name = "DEEPINFRA_API_KEY"
+dimensions = 1024
+query_prefix = "Instruct: Given a security question, retrieve passages from HackerOne vulnerability reports that answer it\nQuery:"
+
+# ---- LLM profiles (enrichment, answering and judging) ----
+[llm.openrouter_enrich]             # writes "When to try this" - cheap and fast; the id is a choice you can change
+provider = "openai_compat"
+base_url = "https://openrouter.ai/api/v1"
+model = "openai/gpt-4o-mini"        # UNVERIFIED against OpenRouter's current model list - change it if OpenRouter rejects the id
+api_key_name = "OPENROUTER_API_KEY"
+max_tokens = 300
+temperature = 0.2
+
+# Set `model` for any profile you use. temperature=-1 means "do not send it".
+[llm.claude_sonnet]
+provider = "anthropic"
+model = "claude-sonnet-5-5"
+api_key_name = "ANTHROPIC_API_KEY"
+max_tokens = 1500
+temperature = 0.0
+
+[llm.openai_judge]                  # a different company from the answer model
+provider = "openai_compat"
+base_url = "https://api.openai.com/v1"
+model = "SET_ME"                    # <- put an OpenAI chat model id here
+api_key_name = "OPENAI_API_KEY"
+max_tokens = 1500
+temperature = 0.0
+max_tokens_param = "max_tokens"     # some newer OpenAI models need "max_completion_tokens"
+
+[llm.gemini_judge]                  # UNVERIFIED: Gemini's OpenAI-compatible endpoint
+provider = "openai_compat"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai"
+model = "SET_ME"
+api_key_name = "GEMINI_API_KEY"
+max_tokens = 1500
+temperature = 0.0
+
+# ---- reranker (optional experiment arm) ----
+[rerank.voyage_rerank]
+provider = "voyage"
+model = "rerank-2.5"
+api_key_name = "VOYAGE_API_KEY"
