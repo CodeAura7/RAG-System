@@ -1,0 +1,8 @@
+# Paste this block into config.toml, just above the line "# Set `model` for any profile you use..." (or anywhere in the [llm.*] section).
+[llm.openrouter_answer]             # ANSWERS through OpenRouter: the same cheap model, but with room for a complete JSON answer
+provider = "openai_compat"          # (openrouter_enrich above stops at 300 tokens, which cuts a JSON answer off mid-sentence)
+base_url = "https://openrouter.ai/api/v1"
+model = "openai/gpt-4o-mini"
+api_key_name = "OPENROUTER_API_KEY"
+max_tokens = 1500
+temperature = 0.0

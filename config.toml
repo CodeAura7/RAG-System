@@ -115,6 +115,14 @@ api_key_name = "OPENROUTER_API_KEY"
 max_tokens = 300
 temperature = 0.2
 
+[llm.openrouter_answer]            
+provider = "openai_compat"
+base_url = "https://openrouter.ai/api/v1"
+model = "openai/gpt-4o-mini"
+api_key_name = "OPENROUTER_API_KEY"
+max_tokens = 1500              
+temperature = 0.0
+
 # Set `model` for any profile you use. temperature=-1 means "do not send it".
 [llm.claude_sonnet]
 provider = "anthropic"

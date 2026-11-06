@@ -11,6 +11,7 @@ import csv
 import json
 import math
 import time
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -216,7 +217,7 @@ def evaluate_answers(questions: Sequence[Question], retriever: Retriever, settin
         cited_known = [c for c in res.citations if c in report_of]
         row: dict[str, Any] = {
             "id": q.id, "type": q.qtype, "answerable": q.answerable, "abstained": res.abstained,
-            "parse_error": res.parse_error, "n_cited": len(res.citations),
+            "parse_error": res.parse_error, "parse_how": res.parse_how, "n_cited": len(res.citations),
             "citations_valid": True if res.abstained else bool(res.citations) and all(c in res.retrieved for c in res.citations),
             "cited_gold": (any(report_of[c] in gold for c in cited_known) if q.answerable and not res.abstained else None),
             "citation_precision": (round(sum(report_of[c] in gold for c in cited_known) / len(res.citations), 4)
@@ -259,6 +260,7 @@ def summarise_answers(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
                                       or r["parse_error"]]),
         "faithful_rate": _rate([r["faithful"] for r in graded]),
         "parse_errors": sum(r["parse_error"] for r in rows), "judge_errors": sum(r["judge_error"] for r in rows),
+        "parse_outcomes": dict(Counter(r.get("parse_how", "strict") for r in rows)),    # how replies were read: repaired/salvaged are not clean
         "note": "fact_recall_overall counts an abstained or unparseable answer to an answerable question as 0.",
     }
 
